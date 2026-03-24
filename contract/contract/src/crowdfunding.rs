@@ -320,22 +320,14 @@ impl CrowdfundingTrait for CrowdfundingContract {
 
         // Credit event pool
         let event_pool_key = StorageKey::EventPool(pool_id);
-        let current_event: i128 = env
-            .storage()
-            .instance()
-            .get(&event_pool_key)
-            .unwrap_or(0);
+        let current_event: i128 = env.storage().instance().get(&event_pool_key).unwrap_or(0);
         env.storage()
             .instance()
             .set(&event_pool_key, &(current_event + event_amount));
 
         // Credit platform fee pool
         let event_fee_key = StorageKey::EventPlatformFees(pool_id);
-        let current_fees: i128 = env
-            .storage()
-            .instance()
-            .get(&event_fee_key)
-            .unwrap_or(0);
+        let current_fees: i128 = env.storage().instance().get(&event_fee_key).unwrap_or(0);
         env.storage()
             .instance()
             .set(&event_fee_key, &(current_fees + fee_amount));

@@ -173,5 +173,6 @@ pub fn ticket_sold(
     fee_amount: i128,
 ) {
     let topics = (Symbol::new(env, "ticket_sold"), pool_id, buyer);
-    env.events().publish(topics, (price, event_amount, fee_amount));
+    env.events()
+        .publish(topics, (price, event_amount, fee_amount));
 }

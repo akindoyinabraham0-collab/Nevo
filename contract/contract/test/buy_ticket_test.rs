@@ -174,7 +174,11 @@ fn test_buy_ticket_accumulates_across_multiple_purchases() {
     // After 3 tickets: event pool = 29_250, platform fees = 750
     let token_client = token::Client::new(&env, &token);
     let contract_balance = token_client.balance(&client.address);
-    assert_eq!(contract_balance, price * 3, "contract holds all ticket revenue");
+    assert_eq!(
+        contract_balance,
+        price * 3,
+        "contract holds all ticket revenue"
+    );
 }
 
 // ── validation ────────────────────────────────────────────────────────────────
