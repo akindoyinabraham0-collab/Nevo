@@ -144,7 +144,7 @@ fn test_get_pool_contributions_paginated_nonexistent_pool() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let (client, _admin, token_client) = setup_contract(&env);
+    let (client, _admin, _token_client) = setup_contract(&env);
 
     // Try to fetch contributions from a non-existent pool
     client.get_pool_contributions_paginated(&999, &0, &5);

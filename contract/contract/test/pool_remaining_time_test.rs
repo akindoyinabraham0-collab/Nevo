@@ -83,7 +83,7 @@ fn test_pool_remaining_time_expired_returns_zero() {
 #[test]
 fn test_pool_remaining_time_not_found() {
     let env = Env::default();
-    let (client, _, token_address) = setup_test(&env);
+    let (client, _, _token_address) = setup_test(&env);
 
     let result = client.try_get_pool_remaining_time(&999u64);
     assert_eq!(result, Err(Ok(CrowdfundingError::PoolNotFound)));

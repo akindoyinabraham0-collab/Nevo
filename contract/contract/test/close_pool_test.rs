@@ -215,7 +215,7 @@ fn test_is_closed_for_closed_pool() {
 #[test]
 fn test_is_closed_nonexistent_pool() {
     let env = Env::default();
-    let (client, _, token_address) = setup_test(&env);
+    let (client, _, _token_address) = setup_test(&env);
 
     let nonexistent_pool_id = 999u64;
 
