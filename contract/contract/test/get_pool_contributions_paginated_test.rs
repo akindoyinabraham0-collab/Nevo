@@ -17,9 +17,9 @@ fn create_token_contract<'a>(env: &Env, admin: &Address) -> token::StellarAssetC
 fn setup_contract(
     env: &Env,
 ) -> (
-    CrowdfundingContractClient,
+    CrowdfundingContractClient<'_>,
     Address,
-    token::StellarAssetClient,
+    token::StellarAssetClient<'_>,
 ) {
     let contract_id = env.register(CrowdfundingContract, ());
     let client = CrowdfundingContractClient::new(env, &contract_id);

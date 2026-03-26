@@ -11,7 +11,7 @@ use crate::{
     crowdfunding::{CrowdfundingContract, CrowdfundingContractClient},
 };
 
-fn setup_test(env: &Env) -> (CrowdfundingContractClient, Address, Address) {
+fn setup_test(env: &Env) -> (CrowdfundingContractClient<'_>, Address, Address) {
     env.mock_all_auths();
     let contract_id = env.register(CrowdfundingContract, ());
     let client = CrowdfundingContractClient::new(env, &contract_id);

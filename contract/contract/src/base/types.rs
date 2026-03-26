@@ -141,22 +141,28 @@ pub enum EventStatus {
     Completed = 2,
 }
 
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EventDetails {
+    pub id: u64,
+    pub title: String,
+    pub creator: Address,
+    pub ticket_price: i128,
+    pub max_attendees: u32,
+    pub deadline: u64,
+}
+
 /// Represents the type of a ticket.
 /// Standard is the default type.
 #[contracttype]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 #[repr(u32)]
 pub enum TicketType {
     /// Standard ticket for general access.
+    #[default]
     Standard = 0,
     /// VIP ticket for premium access.
     VIP = 1,
-}
-
-impl Default for TicketType {
-    fn default() -> Self {
-        TicketType::Standard
-    }
 }
 
 #[contracttype]
@@ -447,5 +453,25 @@ mod tests {
     #[test]
     fn ticket_type_default_is_standard() {
         assert_eq!(TicketType::default(), TicketType::Standard);
+    }
+
+    #[test]
+    fn event_details_instantiation() {
+        use soroban_sdk::testutils::Address as _;
+        let env = Env::default();
+        let creator = soroban_sdk::Address::generate(&env);
+        let event = EventDetails {
+            id: 1,
+            title: String::from_str(&env, "Nevo Launch"),
+            creator: creator.clone(),
+            ticket_price: 500,
+            max_attendees: 100,
+            deadline: 1_700_000_000,
+        };
+        assert_eq!(event.id, 1);
+        assert_eq!(event.ticket_price, 500);
+        assert_eq!(event.max_attendees, 100);
+        assert_eq!(event.deadline, 1_700_000_000);
+        assert_eq!(event.creator, creator);
     }
 }

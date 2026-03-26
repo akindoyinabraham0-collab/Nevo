@@ -316,7 +316,7 @@ impl CrowdfundingTrait for CrowdfundingContract {
         // Transfer full price from buyer to contract
         use soroban_sdk::token;
         let token_client = token::Client::new(&env, &asset);
-        token_client.transfer(&buyer, &env.current_contract_address(), &price);
+        token_client.transfer(&buyer, env.current_contract_address(), &price);
 
         // Credit event pool
         let event_pool_key = StorageKey::EventPool(pool_id);
@@ -1624,7 +1624,7 @@ impl CrowdfundingTrait for CrowdfundingContract {
             .ok_or(CrowdfundingError::NotInitialized)?;
 
         // Check authorization: caller must be either the pool creator or admin
-        let is_creator = creator.as_ref().map_or(false, |c| c == &caller);
+        let is_creator = creator.as_ref() == Some(&caller);
         let is_admin = caller == admin;
 
         if !is_creator && !is_admin {

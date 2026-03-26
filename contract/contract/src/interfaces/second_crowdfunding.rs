@@ -10,6 +10,7 @@ use crate::base::errors::SecondCrowdfundingError;
 /// when you need to distinguish string-length violations from other contract
 /// errors — for example, in unit-tests that verify title/metadata length
 /// limits without going through the Soroban client dispatcher.
+#[allow(dead_code)]
 pub trait SecondCrowdfundingTrait {
     /// Validates the campaign title length and, if valid, creates the campaign.
     ///
