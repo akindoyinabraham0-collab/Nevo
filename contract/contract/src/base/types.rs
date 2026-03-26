@@ -288,6 +288,8 @@ pub enum StorageKey {
     EventPool(u64),
     // Per-pool revenue split: tokens accumulated as platform fee
     EventPlatformFees(u64),
+    // Track if someone bought a ticket
+    UserTicket(u64, Address),
 }
 
 #[cfg(test)]

@@ -332,6 +332,10 @@ impl CrowdfundingTrait for CrowdfundingContract {
             .instance()
             .set(&event_fee_key, &(current_fees + fee_amount));
 
+        // Track user ticket
+        let user_ticket_key = StorageKey::UserTicket(pool_id, buyer.clone());
+        env.storage().instance().set(&user_ticket_key, &true);
+
         events::ticket_sold(&env, pool_id, buyer, price, event_amount, fee_amount);
 
         Ok((event_amount, fee_amount))
