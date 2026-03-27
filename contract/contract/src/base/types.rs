@@ -34,9 +34,12 @@ pub struct PoolConfig {
     pub name: String,
     pub description: String,
     pub target_amount: i128,
+    // Minimum contribution allowed for this pool (in token smallest units)
+    pub min_contribution: i128,
     pub is_private: bool,
     pub duration: u64,
     pub created_at: u64,
+    pub token_address: Address,
 }
 
 #[contracttype]
@@ -50,6 +53,7 @@ pub struct PoolMetadata {
 pub const MAX_DESCRIPTION_LENGTH: u32 = 500;
 pub const MAX_URL_LENGTH: u32 = 200;
 pub const MAX_HASH_LENGTH: u32 = 100;
+pub const MAX_STRING_LENGTH: u32 = 200;
 
 impl PoolConfig {
     /// Validate pool configuration according to Nevo invariants.
@@ -69,6 +73,13 @@ impl PoolConfig {
 
         // Target amount must be strictly positive
         assert!(self.target_amount > 0, "target_amount must be > 0");
+
+        // Minimum contribution must be non-negative and not exceed the target
+        assert!(self.min_contribution >= 0, "min_contribution must be >= 0");
+        assert!(
+            self.min_contribution <= self.target_amount,
+            "min_contribution must be <= target_amount"
+        );
 
         // Duration must be strictly positive (non-zero)
         assert!(self.duration > 0, "duration must be > 0");
@@ -119,6 +130,39 @@ pub enum PoolState {
     Cancelled = 3,
     Disbursed = 4,
     Closed = 5,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum EventStatus {
+    Active = 0,
+    Cancelled = 1,
+    Completed = 2,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EventDetails {
+    pub id: u64,
+    pub title: String,
+    pub creator: Address,
+    pub ticket_price: i128,
+    pub max_attendees: u32,
+    pub deadline: u64,
+}
+
+/// Represents the type of a ticket.
+/// Standard is the default type.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[repr(u32)]
+pub enum TicketType {
+    /// Standard ticket for general access.
+    #[default]
+    Standard = 0,
+    /// VIP ticket for premium access.
+    VIP = 1,
 }
 
 #[contracttype]
@@ -215,6 +259,7 @@ pub enum StorageKey {
     CampaignDonor(BytesN<32>, Address),
     Contribution(BytesN<32>, Address),
     PoolContribution(u64, Address),
+    PoolContributors(u64),
 
     NextPoolId,
     IsPaused,
@@ -230,25 +275,41 @@ pub enum StorageKey {
     PlatformFees,
     GlobalTotalRaised,
     CampaignCancelled(BytesN<32>),
+    CampaignClaimed(BytesN<32>),
     EmergencyContact,
     CampaignFeeHistory(BytesN<32>),
+    Blacklist(Address),
+    ReentrancyLock(u64),
+    EmergencyWithdrawalLock,
+    PoolCreator(u64),
+    EventFeeTreasury,
+    PlatformFeeBps,
+    // Per-pool revenue split: tokens destined for the event creator
+    EventPool(u64),
+    // Per-pool revenue split: tokens accumulated as platform fee
+    EventPlatformFees(u64),
+    // Track if someone bought a ticket
+    UserTicket(u64, Address),
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::Env;
+    use soroban_sdk::{testutils::Address as _, Address, Env};
 
     #[test]
     fn pool_config_validation_success() {
         let env = Env::default();
+        let token = Address::generate(&env);
         let cfg = PoolConfig {
             name: String::from_str(&env, "Education Fund"),
             description: String::from_str(&env, "Fund for student education materials"),
             target_amount: 1_000_000,
+            min_contribution: 0,
             is_private: false,
             duration: 30 * 24 * 60 * 60,
             created_at: 1,
+            token_address: token,
         };
 
         cfg.validate();
@@ -258,13 +319,16 @@ mod tests {
     #[should_panic]
     fn pool_config_invalid_target_amount_panics() {
         let env = Env::default();
+        let token = Address::generate(&env);
         let cfg = PoolConfig {
             name: String::from_str(&env, "Invalid Target"),
             description: String::from_str(&env, "Description"),
             target_amount: 0,
+            min_contribution: 0,
             is_private: false,
             duration: 30 * 24 * 60 * 60,
             created_at: 1,
+            token_address: token,
         };
 
         cfg.validate();
@@ -366,5 +430,50 @@ mod tests {
             false,
         );
         assert_eq!(status, CampaignLifecycleStatus::Successful);
+    }
+
+    #[test]
+    fn event_status_serialization() {
+        use soroban_sdk::{FromVal, IntoVal, Val};
+        let env = Env::default();
+        let status = EventStatus::Active;
+        let val: Val = status.into_val(&env);
+        let deserialized: EventStatus = EventStatus::from_val(&env, &val);
+        assert_eq!(status, deserialized);
+
+        let status = EventStatus::Cancelled;
+        let val: Val = status.into_val(&env);
+        let deserialized: EventStatus = EventStatus::from_val(&env, &val);
+        assert_eq!(status, deserialized);
+
+        let status = EventStatus::Completed;
+        let val: Val = status.into_val(&env);
+        let deserialized: EventStatus = EventStatus::from_val(&env, &val);
+        assert_eq!(status, deserialized);
+    }
+
+    #[test]
+    fn ticket_type_default_is_standard() {
+        assert_eq!(TicketType::default(), TicketType::Standard);
+    }
+
+    #[test]
+    fn event_details_instantiation() {
+        use soroban_sdk::testutils::Address as _;
+        let env = Env::default();
+        let creator = soroban_sdk::Address::generate(&env);
+        let event = EventDetails {
+            id: 1,
+            title: String::from_str(&env, "Nevo Launch"),
+            creator: creator.clone(),
+            ticket_price: 500,
+            max_attendees: 100,
+            deadline: 1_700_000_000,
+        };
+        assert_eq!(event.id, 1);
+        assert_eq!(event.ticket_price, 500);
+        assert_eq!(event.max_attendees, 100);
+        assert_eq!(event.deadline, 1_700_000_000);
+        assert_eq!(event.creator, creator);
     }
 }

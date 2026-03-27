@@ -366,7 +366,7 @@ fn test_extend_campaign_deadline_invalid_auth() {
     let (client, _, token_address) = setup_test(&env);
 
     let creator = Address::generate(&env);
-    let malicious = Address::generate(&env);
+    let _malicious = Address::generate(&env);
     let campaign_id = create_test_campaign_id(&env, 13);
     let title = String::from_str(&env, "Extend Auth");
     let goal = 1_000_000i128;
@@ -381,7 +381,7 @@ fn test_extend_campaign_deadline_invalid_auth() {
         &token_address,
     );
 
-    let new_deadline = env.ledger().timestamp() + 2 * 86400;
+    let _new_deadline = env.ledger().timestamp() + 2 * 86400;
 
     // mock_auths to malicious address simulating a fail
     // However, in mock_auths, if the caller requires the auth of creator, it will panic
@@ -427,11 +427,12 @@ fn test_extend_campaign_too_long() {
 #[test]
 fn test_get_campaign_fee_history() {
     let env = Env::default();
-    let (client, admin, token_address) = setup_test(&env);
+    env.mock_all_auths();
+    let (client, _admin, token_address) = setup_test(&env);
 
     // Using token_admin pattern from other tests
-    let token_admin = Address::generate(&env);
-    let token_client = token::Client::new(&env, &token_address);
+    let _token_admin = Address::generate(&env);
+    let _token_client = token::Client::new(&env, &token_address);
     let token_admin_client = token::StellarAssetClient::new(&env, &token_address);
 
     let creator = Address::generate(&env);
@@ -3097,6 +3098,117 @@ fn test_set_crowdfunding_token_unauthorized() {
 }
 
 #[test]
+fn test_update_campaign_goal_success() {
+    let env = Env::default();
+    let (client, _, token_address) = setup_test(&env);
+
+    let creator = Address::generate(&env);
+    let campaign_id = create_test_campaign_id(&env, 100);
+    let title = String::from_str(&env, "Goal Update Test");
+    let goal = 10_000i128;
+    let deadline = env.ledger().timestamp() + 86400;
+
+    client.create_campaign(
+        &campaign_id,
+        &title,
+        &creator,
+        &goal,
+        &deadline,
+        &token_address,
+    );
+
+    // Mock auth for update
+    client.update_campaign_goal(&campaign_id, &5_000i128);
+
+    let campaign = client.get_campaign(&campaign_id);
+    assert_eq!(campaign.goal, 5_000i128);
+}
+
+#[test]
+fn test_update_campaign_goal_increase_fails() {
+    let env = Env::default();
+    let (client, _, token_address) = setup_test(&env);
+
+    let creator = Address::generate(&env);
+    let campaign_id = create_test_campaign_id(&env, 101);
+    let title = String::from_str(&env, "Goal Increase Test");
+    let goal = 10_000i128;
+    let deadline = env.ledger().timestamp() + 86400;
+
+    client.create_campaign(
+        &campaign_id,
+        &title,
+        &creator,
+        &goal,
+        &deadline,
+        &token_address,
+    );
+
+    // Try to increase goal - should fail
+    let result = client.try_update_campaign_goal(&campaign_id, &15_000i128);
+    assert_eq!(result, Err(Ok(CrowdfundingError::InvalidGoalUpdate)));
+}
+
+#[test]
+fn test_update_campaign_goal_below_raised_fails() {
+    let env = Env::default();
+    let (client, _, token_address) = setup_test(&env);
+
+    let creator = Address::generate(&env);
+    let campaign_id = create_test_campaign_id(&env, 102);
+    let title = String::from_str(&env, "Goal Below Raised Test");
+    let goal = 10_000i128;
+    let deadline = env.ledger().timestamp() + 86400;
+
+    client.create_campaign(
+        &campaign_id,
+        &title,
+        &creator,
+        &goal,
+        &deadline,
+        &token_address,
+    );
+
+    // Donate
+    let donor = Address::generate(&env);
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_address);
+    token_admin_client.mint(&donor, &8_000i128);
+
+    client.donate(&campaign_id, &donor, &token_address, &6_000i128);
+
+    // Try to lower goal below raised amount - should fail
+    let result = client.try_update_campaign_goal(&campaign_id, &5_000i128);
+    assert_eq!(result, Err(Ok(CrowdfundingError::InvalidGoalUpdate)));
+}
+
+#[test]
+fn test_update_campaign_goal_expired_fails() {
+    let env = Env::default();
+    let (client, _, token_address) = setup_test(&env);
+
+    let creator = Address::generate(&env);
+    let campaign_id = create_test_campaign_id(&env, 103);
+    let title = String::from_str(&env, "Expired Update Test");
+    let goal = 10_000i128;
+    let deadline = env.ledger().timestamp() + 86400;
+
+    client.create_campaign(
+        &campaign_id,
+        &title,
+        &creator,
+        &goal,
+        &deadline,
+        &token_address,
+    );
+
+    // Advance time past deadline
+    env.ledger().with_mut(|li| li.timestamp = deadline + 1);
+
+    let result = client.try_update_campaign_goal(&campaign_id, &5_000i128);
+    assert_eq!(result, Err(Ok(CrowdfundingError::CampaignExpired)));
+}
+
+#[test]
 fn test_get_active_campaign_count() {
     let env = Env::default();
     let (client, _, token_address) = setup_test(&env);
@@ -3196,6 +3308,7 @@ fn test_get_active_campaign_count_all_expired() {
     assert_eq!(client.get_active_campaign_count(), 0);
 }
 
+#[test]
 fn test_withdraw_platform_fees_success() {
     let env = Env::default();
     let (client, admin, token_address) = setup_test(&env);
@@ -3340,9 +3453,6 @@ fn test_get_active_campaign_count_unaffected_by_donation_status() {
 
     // fully funded but deadline not passed - still counts as active
     assert_eq!(client.get_active_campaign_count(), 1);
-    let non_admin = Address::generate(&env);
-    let res = client.try_withdraw_platform_fees(&non_admin, &100);
-    assert_eq!(res, Err(Ok(CrowdfundingError::Unauthorized)));
 }
 
 #[test]
@@ -3353,10 +3463,101 @@ fn test_withdraw_platform_fees_insufficient_fees() {
     let res = client.try_withdraw_platform_fees(&admin, &100);
     assert_eq!(res, Err(Ok(CrowdfundingError::InsufficientFees)));
 }
+
+#[test]
+fn test_withdraw_event_fees_success() {
+    let env = Env::default();
+    let (client, admin, token_address) = setup_test(&env);
+
+    let token_admin_client = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    token_admin_client.mint(&client.address, &1_000i128);
+
+    env.as_contract(&client.address, || {
+        env.storage()
+            .instance()
+            .set(&crate::base::types::StorageKey::EventFeeTreasury, &500i128);
+    });
+
+    let to = Address::generate(&env);
+    let token_client = soroban_sdk::token::Client::new(&env, &token_address);
+
+    let to_balance_before = token_client.balance(&to);
+
+    client.withdraw_event_fees(&admin, &to, &100);
+
+    let to_balance_after = token_client.balance(&to);
+    assert_eq!(to_balance_after - to_balance_before, 100);
+
+    let remaining_fees: i128 = env.as_contract(&client.address, || {
+        env.storage()
+            .instance()
+            .get(&crate::base::types::StorageKey::EventFeeTreasury)
+            .unwrap_or(0)
+    });
+    assert_eq!(remaining_fees, 400);
+}
+
+#[test]
+fn test_withdraw_event_fees_non_admin_fails() {
+    let env = Env::default();
+    let (client, _, token_address) = setup_test(&env);
+
+    let token_admin_client = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    token_admin_client.mint(&client.address, &1_000i128);
+
+    env.as_contract(&client.address, || {
+        env.storage()
+            .instance()
+            .set(&crate::base::types::StorageKey::EventFeeTreasury, &500i128);
+    });
+
+    let to = Address::generate(&env);
+    let non_admin = Address::generate(&env);
+
+    let result = client
+        .mock_auths(&[soroban_sdk::testutils::MockAuth {
+            address: &non_admin,
+            invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "withdraw_event_fees",
+                args: soroban_sdk::vec![
+                    &env,
+                    non_admin.clone().into_val(&env),
+                    to.clone().into_val(&env),
+                    100i128.into_val(&env),
+                ],
+                sub_invokes: &[],
+            },
+        }])
+        .try_withdraw_event_fees(&non_admin, &to, &100);
+
+    assert_eq!(result, Err(Ok(CrowdfundingError::Unauthorized)));
+}
+
+#[test]
+fn test_withdraw_event_fees_insufficient_fees() {
+    let env = Env::default();
+    let (client, admin, token_address) = setup_test(&env);
+
+    let token_admin_client = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    token_admin_client.mint(&client.address, &1_000i128);
+
+    env.as_contract(&client.address, || {
+        env.storage()
+            .instance()
+            .set(&crate::base::types::StorageKey::EventFeeTreasury, &50i128);
+    });
+
+    let to = Address::generate(&env);
+
+    let result = client.try_withdraw_event_fees(&admin, &to, &100);
+    assert_eq!(result, Err(Ok(CrowdfundingError::InsufficientFees)));
+}
+
 #[test]
 fn test_set_emergency_contact_success() {
     let env = Env::default();
-    let (client, admin, _) = setup_test(&env);
+    let (client, _admin, _) = setup_test(&env);
 
     let emergency_contact = Address::generate(&env);
 
@@ -3370,7 +3571,7 @@ fn test_set_emergency_contact_success() {
 #[test]
 fn test_set_emergency_contact_updates_existing() {
     let env = Env::default();
-    let (client, admin, _) = setup_test(&env);
+    let (client, _admin, _) = setup_test(&env);
 
     let contact1 = Address::generate(&env);
     client.set_emergency_contact(&contact1);
@@ -3417,4 +3618,186 @@ fn test_get_contract_version() {
 
     let version = client.get_contract_version();
     assert_eq!(version, String::from_str(&env, "1.2.0"));
+}
+
+#[test]
+fn test_cancel_campaign() {
+    let env = Env::default();
+    let (client, _, token_address) = setup_test(&env);
+
+    let creator = Address::generate(&env);
+    let campaign_id = create_test_campaign_id(&env, 100);
+    let title = String::from_str(&env, "Cancel Test");
+    let goal = 10_000i128;
+    let deadline = env.ledger().timestamp() + 86400;
+
+    client.create_campaign(
+        &campaign_id,
+        &title,
+        &creator,
+        &goal,
+        &deadline,
+        &token_address,
+    );
+
+    // Cancel the campaign
+    client
+        .mock_auths(&[soroban_sdk::testutils::MockAuth {
+            address: &creator,
+            invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "cancel_campaign",
+                args: soroban_sdk::vec![&env, campaign_id.clone().into_val(&env)],
+                sub_invokes: &[],
+            },
+        }])
+        .cancel_campaign(&campaign_id);
+
+    // Verify it is cancelled
+    let status = client.get_campaign_status(&campaign_id);
+    assert_eq!(
+        status,
+        crate::base::types::CampaignLifecycleStatus::Cancelled
+    );
+}
+
+#[test]
+fn test_donate_to_cancelled_campaign_fails() {
+    let env = Env::default();
+    let (client, _, token_address) = setup_test(&env);
+
+    let creator = Address::generate(&env);
+    let campaign_id = create_test_campaign_id(&env, 101);
+    let title = String::from_str(&env, "Cancel Donation Test");
+    let goal = 10_000i128;
+    let deadline = env.ledger().timestamp() + 86400;
+
+    client.create_campaign(
+        &campaign_id,
+        &title,
+        &creator,
+        &goal,
+        &deadline,
+        &token_address,
+    );
+
+    // Cancel the campaign
+    client
+        .mock_auths(&[soroban_sdk::testutils::MockAuth {
+            address: &creator,
+            invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "cancel_campaign",
+                args: soroban_sdk::vec![&env, campaign_id.clone().into_val(&env)],
+                sub_invokes: &[],
+            },
+        }])
+        .cancel_campaign(&campaign_id);
+
+    // Try donating
+    let donor = Address::generate(&env);
+    let token_admin_client = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    token_admin_client.mint(&donor, &5_000i128);
+
+    let result = client
+        .mock_auths(&[soroban_sdk::testutils::MockAuth {
+            address: &donor,
+            invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "donate",
+                args: soroban_sdk::vec![
+                    &env,
+                    campaign_id.clone().into_val(&env),
+                    donor.clone().into_val(&env),
+                    token_address.clone().into_val(&env),
+                    1_000i128.into_val(&env),
+                ],
+                sub_invokes: &[],
+            },
+        }])
+        .try_donate(&campaign_id, &donor, &token_address, &1_000i128);
+
+    assert_eq!(result, Err(Ok(CrowdfundingError::CampaignCancelled)));
+}
+
+#[test]
+fn test_refund_campaign() {
+    let env = Env::default();
+    let (client, _, token_address) = setup_test(&env);
+
+    let creator = Address::generate(&env);
+    let donor = Address::generate(&env);
+    let campaign_id = create_test_campaign_id(&env, 102);
+    let title = String::from_str(&env, "Refund Campaign Test");
+    let goal = 10_000i128;
+    let deadline = env.ledger().timestamp() + 86400;
+
+    client.create_campaign(
+        &campaign_id,
+        &title,
+        &creator,
+        &goal,
+        &deadline,
+        &token_address,
+    );
+
+    // Mint and donate
+    let token_admin_client = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    let token_client = soroban_sdk::token::Client::new(&env, &token_address);
+    token_admin_client.mint(&donor, &5_000i128);
+
+    client
+        .mock_auths(&[soroban_sdk::testutils::MockAuth {
+            address: &donor,
+            invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "donate",
+                args: soroban_sdk::vec![
+                    &env,
+                    campaign_id.clone().into_val(&env),
+                    donor.clone().into_val(&env),
+                    token_address.clone().into_val(&env),
+                    1_000i128.into_val(&env),
+                ],
+                sub_invokes: &[soroban_sdk::testutils::MockAuthInvoke {
+                    contract: &token_address,
+                    fn_name: "transfer",
+                    args: soroban_sdk::vec![
+                        &env,
+                        donor.clone().into_val(&env),
+                        client.address.clone().into_val(&env),
+                        1_000i128.into_val(&env),
+                    ],
+                    sub_invokes: &[],
+                }],
+            },
+        }])
+        .donate(&campaign_id, &donor, &token_address, &1_000i128);
+
+    assert_eq!(token_client.balance(&donor), 4_000i128);
+    assert_eq!(client.get_contribution(&campaign_id, &donor), 1_000i128);
+
+    // Need to use creator auth to cancel
+    client
+        .mock_auths(&[soroban_sdk::testutils::MockAuth {
+            address: &creator,
+            invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "cancel_campaign",
+                args: soroban_sdk::vec![&env, campaign_id.clone().into_val(&env)],
+                sub_invokes: &[],
+            },
+        }])
+        .cancel_campaign(&campaign_id);
+
+    // Once cancelled, process refund
+    client.refund_campaign(&campaign_id, &donor);
+
+    // Check balances and state
+    assert_eq!(token_client.balance(&donor), 5_000i128);
+    assert_eq!(client.get_contribution(&campaign_id, &donor), 0i128);
+
+    // Trying second time fails
+    let result = client.try_refund_campaign(&campaign_id, &donor);
+    assert_eq!(result, Err(Ok(CrowdfundingError::NoContributionToRefund)));
 }

@@ -2,7 +2,10 @@ use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
 use crate::base::{
     errors::CrowdfundingError,
-    types::{CampaignDetails, CampaignLifecycleStatus, PoolConfig, PoolMetadata, PoolState},
+    types::{
+        CampaignDetails, CampaignLifecycleStatus, PoolConfig, PoolContribution, PoolMetadata,
+        PoolState,
+    },
 };
 
 pub trait CrowdfundingTrait {
@@ -51,11 +54,32 @@ pub trait CrowdfundingTrait {
         amount: i128,
     ) -> Result<(), CrowdfundingError>;
 
+    fn update_campaign_goal(
+        env: Env,
+        campaign_id: BytesN<32>,
+        new_goal: i128,
+    ) -> Result<(), CrowdfundingError>;
+
+    fn cancel_campaign(env: Env, campaign_id: BytesN<32>) -> Result<(), CrowdfundingError>;
+
+    fn refund_campaign(
+        env: Env,
+        campaign_id: BytesN<32>,
+        contributor: Address,
+    ) -> Result<(), CrowdfundingError>;
+
     fn extend_campaign_deadline(
         env: Env,
         campaign_id: BytesN<32>,
         new_deadline: u64,
     ) -> Result<(), CrowdfundingError>;
+
+    fn claim_campaign_funds(env: Env, campaign_id: BytesN<32>) -> Result<(), CrowdfundingError>;
+
+    fn batch_claim_campaign_funds(
+        env: Env,
+        campaign_ids: Vec<BytesN<32>>,
+    ) -> Vec<Result<(), CrowdfundingError>>;
 
     fn get_campaign_fee_history(
         env: Env,
@@ -154,9 +178,13 @@ pub trait CrowdfundingTrait {
 
     fn is_cause_verified(env: Env, cause: Address) -> bool;
 
-    fn withdraw_platform_fees(
+    fn withdraw_platform_fees(env: Env, to: Address, amount: i128)
+        -> Result<(), CrowdfundingError>;
+
+    fn withdraw_event_fees(
         env: Env,
         admin: Address,
+        to: Address,
         amount: i128,
     ) -> Result<(), CrowdfundingError>;
 
@@ -165,4 +193,34 @@ pub trait CrowdfundingTrait {
     fn get_emergency_contact(env: Env) -> Result<Address, CrowdfundingError>;
 
     fn get_contract_version(env: Env) -> String;
+
+    fn get_pool_contributions_paginated(
+        env: Env,
+        pool_id: u64,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<PoolContribution>, CrowdfundingError>;
+
+    fn get_pool_remaining_time(env: Env, pool_id: u64) -> Result<u64, CrowdfundingError>;
+
+    fn set_platform_fee_bps(env: Env, fee_bps: u32) -> Result<(), CrowdfundingError>;
+
+    fn get_platform_fee_bps(env: Env) -> Result<u32, CrowdfundingError>;
+
+    /// Purchase a ticket for a pool, splitting the payment between the event
+    /// pool and the platform fee pool using the current `PlatformFeeBps`.
+    ///
+    /// * `pool_id`  – target pool (must exist and be Active)
+    /// * `buyer`    – address paying for the ticket (requires auth)
+    /// * `asset`    – token used for payment
+    /// * `price`    – total ticket price (must be > 0)
+    fn buy_ticket(
+        env: Env,
+        pool_id: u64,
+        buyer: Address,
+        asset: Address,
+        price: i128,
+    ) -> Result<(i128, i128), CrowdfundingError>;
+
+    fn upgrade_contract(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), CrowdfundingError>;
 }
